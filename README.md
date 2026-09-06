@@ -1,51 +1,110 @@
 # Driver Settlement Automation
 
-A working document-automation system for trucking back offices. Scan a completed driver's paperwork packet — BOL/POD, driver logs, fuel receipts, scale tickets, lumper receipts, tolls and other reimbursable expenses — and the application OCRs the paperwork, classifies each document, extracts load and expense data, matches it to the company's load board, updates settlement records, and sends only exceptions to human review.
+A native Windows desktop application for trucking back offices. It processes the paperwork drivers return after completing a load — BOL/PODs, driver logs, fuel receipts, scale tickets, lumper receipts, tolls, parking, lodging and other reimbursable expenses — then OCRs the scans, classifies the documents, extracts load and expense data, matches them to the load board, reconciles reimbursement amounts, updates a SQLite settlement system of record and sends only exceptions to human review.
 
-## What it proves
+This is one working end-to-end application, not a collection of isolated demos.
 
-This is one end-to-end application, not a collection of disconnected demos. It combines OCR/computer vision, document classification, structured extraction, SQL/SQLite, workflow automation, reconciliation rules, exception detection, audit logging, a Gradio UI, automated tests and CI.
+## Windows executable
 
-## Real workflow
+GitHub Actions builds a standalone:
 
 ```text
-Driver finishes load
+DriverSettlementAutomation.exe
+```
+
+The Windows build bundles the Python application and Tesseract OCR engine so a reviewer does not need Python or a separate OCR installation.
+
+To get the executable from GitHub, open **Actions → Build Windows EXE → latest successful run → Artifacts → DriverSettlementAutomation-Windows**. The artifact includes the `.exe` and `SHA256.txt` checksum.
+
+## What the desktop app actually does
+
+```text
+Completed driver load
         ↓
-Paperwork packet arrives
+Paper envelope arrives at the company
         ↓
-Scan / upload BOL + logs + receipts
+Scan BOL/POD + logs + receipts
         ↓
-OCR → classify → extract → match to load
+Select scans in DriverSettlementAutomation.exe
         ↓
-Reconcile receipts against expected reimbursement
+OCR document text
+        ↓
+Classify document type
+        ↓
+Extract load / driver / vendor / date / amount
+        ↓
+Match paperwork to company load board
+        ↓
+Reconcile reimbursement and required paperwork
         ↓
 Update settlement database
         ↓
-AUTO-CLEAR clean packets / REVIEW exceptions
+AUTO_CLEARED or REVIEW with a specific exception
 ```
 
-## Quick start
+The desktop dashboard shows settlement status, expected versus scanned reimbursement totals, exception counts and an audit log of system actions.
 
-Requires Python 3.11+ and Tesseract OCR.
+## Skills demonstrated in one product
+
+- OCR / computer vision document processing
+- document classification
+- structured field extraction
+- workflow automation
+- Python desktop application development
+- SQLite / SQL system-of-record updates
+- accounting-style reimbursement reconciliation
+- anomaly and missing-document detection
+- human-in-the-loop review routing
+- audit logging
+- test automation
+- GitHub Actions CI/CD
+- Windows executable packaging
+
+## Supported paperwork
+
+- Bill of Lading / Proof of Delivery
+- driver log / hours-of-service paperwork
+- fuel receipt
+- scale ticket
+- lumper receipt
+- toll receipt
+- parking receipt
+- hotel / lodging receipt
+- other expense receipt
+
+Image scans and PDFs are supported. Text-based PDFs are read directly; image-only PDFs are rendered and OCRed.
+
+## Real settlement rules
+
+For every known load, the application checks:
+
+1. A BOL/POD is present.
+2. A receiver signature is present on the POD.
+3. Driver logs are present.
+4. Extracted load IDs match known company loads.
+5. Extracted driver names match the assigned driver when the document contains a driver name.
+6. The total of scanned reimbursable receipts matches the reimbursement amount submitted for settlement.
+
+A clean packet is marked `AUTO_CLEARED`. Any inconsistent or incomplete packet becomes `REVIEW` and gets explicit exception records.
+
+## Reproducible demonstration
+
+The repo generates three realistic scan-like paperwork packets and runs them through the same OCR and settlement pipeline used by the desktop app.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e '.[dev]'
-
-# Create three realistic demo loads and scanned paperwork images
 python scripts/generate_demo_packet.py
-
-# Prove the full OCR → database → reconciliation workflow
 python -m driver_settlement.verify
-
-# Launch the operations dashboard
-python app.py
 ```
 
-The demo intentionally includes one clean packet, one $30 reimbursement mismatch, and one BOL with a missing receiver signature. A credible verification run should therefore show both automated success and human-review exceptions rather than an artificial 100% pass story.
+Expected business outcome:
 
-## Expected verification outcome
+| Load | Expected result |
+|---|---|
+| `LW-88214` | BOL, signature, log, fuel and scale paperwork agree. Auto-clears with **$329.22** in scanned reimbursable expenses. |
+| `LW-88291` | Settlement submission expects **$344.72**, but the scanned receipt supports **$314.72**. Goes to review with a **$30.00 reimbursement mismatch**. |
+| `LW-88302` | BOL exists but the receiver signature is missing. Goes to review for **missing POD signature**. |
+
+Expected verification summary:
 
 ```text
 DRIVER SETTLEMENT AUTOMATION — END-TO-END VERIFICATION
@@ -61,94 +120,77 @@ Auto-cleared:    1
 Needs review:    2
 ```
 
-## Demo scenarios
+The demo deliberately contains failures. The project does not claim artificial 100% real-world document accuracy.
 
-| Load | Expected behavior |
-|---|---|
-| `LW-88214` | BOL + logs + fuel + scale documents agree. Settlement auto-clears at **$329.22**. |
-| `LW-88291` | Submitted reimbursement is **$344.72**, but scanned fuel receipt is **$314.72**. The system flags a **$30.00 mismatch**. |
-| `LW-88302` | BOL has no receiver signature. The system flags **missing proof of delivery**. |
+## Running from source
 
-## Application behavior
+Requires Python 3.11+ and Tesseract OCR when not using the packaged Windows executable.
 
-For each uploaded document the pipeline records:
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Linux/macOS
+# .venv\Scripts\activate       # Windows
 
-- original filename
-- OCR text
-- detected document type
-- load number
-- driver name
-- vendor
-- date
-- receipt amount
-- extracted structured fields
-
-For each load it then checks:
-
-- BOL/POD present
-- receiver signature present
-- driver log present
-- documents belong to a known load
-- document driver matches assigned driver when available
-- extracted reimbursable expenses match the amount submitted for settlement
-
-Clean loads are automatically marked `AUTO_CLEARED`. Anything uncertain or inconsistent is marked `REVIEW` and an exception record explains why.
-
-## Supported document types
-
-- Bill of Lading / Proof of Delivery
-- Driver log
-- Fuel receipt
-- Scale ticket
-- Lumper receipt
-- Toll receipt
-- Parking receipt
-- Hotel receipt
-- Other expense receipt
-
-## Project layout
-
-```text
-app.py                         Gradio operations dashboard
-src/driver_settlement/
-  database.py                  SQLite schema + system-of-record updates
-  ocr.py                       image/PDF OCR
-  documents.py                 classification + field extraction
-  pipeline.py                  packet workflow + reconciliation
-  demo.py                      reproducible realistic demo packet generator
-  verify.py                    end-to-end verification command
-scripts/generate_demo_packet.py
-tests/
-.github/workflows/ci.yml
+python -m pip install -e '.[dev]'
+python app.py
 ```
 
-## Using your own paperwork
+## Using company data
 
-1. Export a load board CSV with these columns:
+Import a load-board CSV with:
 
 ```text
 load_id,driver,truck,customer,origin,destination,expected_reimbursement
 ```
 
-2. Launch `python app.py`.
-3. Import the load board.
-4. Upload one or more scanned images/PDFs from a driver's paperwork packet.
-5. Enter the packet's load number if it is written only on the envelope; otherwise the extractor can use load IDs found on the paperwork.
-6. Review the dashboard and exception queue.
+Then:
 
-## Safety and accounting boundary
+1. Open the desktop application.
+2. Click **Import Load Board CSV**.
+3. Click **Select Paperwork** and select the scanned packet files.
+4. Optionally enter the load number written on the envelope if it is absent from the paperwork.
+5. Click **Process Packet**.
+6. Review the **Settlements**, **Exceptions**, and **Audit Log** tabs.
 
-The system never invents missing accounting data. Low-confidence or inconsistent packets go to review. The included workflow updates a local SQLite system of record; a production TMS/accounting integration should use the same validated settlement result through a controlled API adapter.
+The application's SQLite database is stored under the user's local application-data directory rather than inside the executable.
 
-## Verification evidence
+## Data model
 
-The strongest proof is the reproducible command:
+The SQLite system of record contains:
 
-```bash
-python -m driver_settlement.verify
+- `loads` — company load and settlement state
+- `documents` — OCR output and structured document fields
+- `exceptions` — unresolved settlement/document problems
+- `audit_log` — trace of imports, processing decisions and settlement updates
+
+## Security / accounting boundary
+
+The application does not invent missing accounting values. Missing, inconsistent or unsupported paperwork is routed to review. The included product updates its own local SQLite system of record; a production TMS/accounting deployment can connect the validated settlement result to a controlled API adapter without changing the OCR/reconciliation workflow.
+
+## Building the Windows executable locally
+
+On a Windows machine with Chocolatey available:
+
+```powershell
+./scripts/build_windows.ps1
 ```
 
-It generates scan-like paperwork images, runs real Tesseract OCR, processes the files through the same pipeline used by the UI, writes SQLite records, and checks the resulting settlement and exception states.
+The output is:
+
+```text
+dist/DriverSettlementAutomation.exe
+```
+
+The same build runs automatically in `.github/workflows/build-windows.yml`.
+
+## Verification
+
+Linux CI runs unit tests plus the complete OCR workflow. Windows CI independently runs the tests and verification before PyInstaller is allowed to produce the executable.
+
+```bash
+python -m pytest -q
+python -m driver_settlement.verify
+```
 
 ## License
 
