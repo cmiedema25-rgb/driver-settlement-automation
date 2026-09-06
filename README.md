@@ -2,21 +2,21 @@
 
 A native Windows desktop application for trucking back offices. It processes the paperwork drivers return after completing a load — BOL/PODs, driver logs, fuel receipts, scale tickets, lumper receipts, tolls, parking, lodging and other reimbursable expenses — then OCRs the scans, classifies the documents, extracts load and expense data, matches them to the load board, reconciles reimbursement amounts, updates a SQLite settlement system of record and sends only exceptions to human review.
 
-This is one working end-to-end application, not a collection of isolated demos.
+This is one working end-to-end application, not a collection of isolated examples.
 
 ## Windows executable
 
-GitHub Actions builds a standalone:
+GitHub Actions builds:
 
 ```text
 DriverSettlementAutomation.exe
 ```
 
-The Windows build bundles the Python application and Tesseract OCR engine so a reviewer does not need Python or a separate OCR installation.
+The Windows build bundles the Python application and Tesseract OCR engine so the executable can run without requiring Python or a separate OCR installation.
 
-To get the executable from GitHub, open **Actions → Build Windows EXE → latest successful run → Artifacts → DriverSettlementAutomation-Windows**. The artifact includes the `.exe` and `SHA256.txt` checksum.
+To retrieve the executable from GitHub, open **Actions → Build Windows EXE → latest successful run → Artifacts → DriverSettlementAutomation-Windows**. The artifact contains the `.exe` and a SHA-256 checksum.
 
-## What the desktop app actually does
+## Workflow
 
 ```text
 Completed driver load
@@ -52,11 +52,11 @@ The desktop dashboard shows settlement status, expected versus scanned reimburse
 - workflow automation
 - Python desktop application development
 - SQLite / SQL system-of-record updates
-- accounting-style reimbursement reconciliation
+- reimbursement reconciliation
 - anomaly and missing-document detection
 - human-in-the-loop review routing
 - audit logging
-- test automation
+- automated testing
 - GitHub Actions CI/CD
 - Windows executable packaging
 
@@ -74,7 +74,7 @@ The desktop dashboard shows settlement status, expected versus scanned reimburse
 
 Image scans and PDFs are supported. Text-based PDFs are read directly; image-only PDFs are rendered and OCRed.
 
-## Real settlement rules
+## Settlement rules
 
 For every known load, the application checks:
 
@@ -85,55 +85,7 @@ For every known load, the application checks:
 5. Extracted driver names match the assigned driver when the document contains a driver name.
 6. The total of scanned reimbursable receipts matches the reimbursement amount submitted for settlement.
 
-A clean packet is marked `AUTO_CLEARED`. Any inconsistent or incomplete packet becomes `REVIEW` and gets explicit exception records.
-
-## Reproducible demonstration
-
-The repo generates three realistic scan-like paperwork packets and runs them through the same OCR and settlement pipeline used by the desktop app.
-
-```bash
-python scripts/generate_demo_packet.py
-python -m driver_settlement.verify
-```
-
-Expected business outcome:
-
-| Load | Expected result |
-|---|---|
-| `LW-88214` | BOL, signature, log, fuel and scale paperwork agree. Auto-clears with **$329.22** in scanned reimbursable expenses. |
-| `LW-88291` | Settlement submission expects **$344.72**, but the scanned receipt supports **$314.72**. Goes to review with a **$30.00 reimbursement mismatch**. |
-| `LW-88302` | BOL exists but the receiver signature is missing. Goes to review for **missing POD signature**. |
-
-Expected verification summary:
-
-```text
-DRIVER SETTLEMENT AUTOMATION — END-TO-END VERIFICATION
-OCR + document classification ........ PASS
-Load matching ........................ PASS
-Clean settlement auto-clear .......... PASS
-Expense mismatch detection ........... PASS
-Missing POD signature detection ...... PASS
-SQLite update + audit trail .......... PASS
-
-Loads processed: 3
-Auto-cleared:    1
-Needs review:    2
-```
-
-The demo deliberately contains failures. The project does not claim artificial 100% real-world document accuracy.
-
-## Running from source
-
-Requires Python 3.11+ and Tesseract OCR when not using the packaged Windows executable.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Linux/macOS
-# .venv\Scripts\activate       # Windows
-
-python -m pip install -e '.[dev]'
-python app.py
-```
+A clean packet is marked `AUTO_CLEARED`. Any inconsistent or incomplete packet becomes `REVIEW` and receives explicit exception records explaining why.
 
 ## Using company data
 
@@ -163,9 +115,31 @@ The SQLite system of record contains:
 - `exceptions` — unresolved settlement/document problems
 - `audit_log` — trace of imports, processing decisions and settlement updates
 
-## Security / accounting boundary
+## Safety / accounting boundary
 
-The application does not invent missing accounting values. Missing, inconsistent or unsupported paperwork is routed to review. The included product updates its own local SQLite system of record; a production TMS/accounting deployment can connect the validated settlement result to a controlled API adapter without changing the OCR/reconciliation workflow.
+The application does not invent missing accounting values. Missing, inconsistent or unsupported paperwork is routed to review. The included product updates its own local SQLite system of record; a production TMS/accounting deployment can connect validated settlement results to a controlled API adapter without changing the OCR and reconciliation workflow.
+
+## Internal validation
+
+The repository contains unit tests and a build-time self-test. The self-test creates temporary files only inside the CI/build environment, verifies the OCR engine, classification, load matching, reconciliation, SQLite persistence and audit logging, and deletes its temporary files immediately afterward. No sample operational dataset or user-facing test packet is included in the repository.
+
+```bash
+python -m pytest -q
+python -m driver_settlement.verify
+```
+
+## Running from source
+
+Requires Python 3.11+ and Tesseract OCR when not using the packaged Windows executable.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Linux/macOS
+# .venv\Scripts\activate       # Windows
+
+python -m pip install -e '.[dev]'
+python app.py
+```
 
 ## Building the Windows executable locally
 
@@ -181,16 +155,7 @@ The output is:
 dist/DriverSettlementAutomation.exe
 ```
 
-The same build runs automatically in `.github/workflows/build-windows.yml`.
-
-## Verification
-
-Linux CI runs unit tests plus the complete OCR workflow. Windows CI independently runs the tests and verification before PyInstaller is allowed to produce the executable.
-
-```bash
-python -m pytest -q
-python -m driver_settlement.verify
-```
+The same process runs automatically in `.github/workflows/build-windows.yml`.
 
 ## License
 
