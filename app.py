@@ -8,11 +8,15 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from driver_settlement import database
+from driver_settlement.demo import generate_demo_dataset
 from driver_settlement.pipeline import process_packet
 
 
 def app_data_dir() -> Path:
-    if os.name == "nt":
+    override = os.environ.get("DRIVER_SETTLEMENT_DATA")
+    if override:
+        root = Path(override)
+    elif os.name == "nt":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
         root = base / "DriverSettlementAutomation"
     else:
@@ -42,7 +46,8 @@ class DriverSettlementApp(tk.Tk):
 
         controls = ttk.Frame(self, padding=(12, 0, 12, 8))
         controls.pack(fill="x")
-        ttk.Button(controls, text="Import Load Board CSV", command=self.import_load_board).pack(side="left", padx=(0, 8))
+        ttk.Button(controls, text="Run Built-in Demo", command=self.run_demo).pack(side="left", padx=(0, 8))
+        ttk.Button(controls, text="Import Load Board CSV", command=self.import_load_board).pack(side="left", padx=8)
         ttk.Button(controls, text="Select Paperwork", command=self.select_paperwork).pack(side="left", padx=8)
         ttk.Button(controls, text="Process Packet", command=self.process_selected).pack(side="left", padx=8)
         ttk.Button(controls, text="Refresh", command=self.refresh).pack(side="left", padx=8)
@@ -104,6 +109,40 @@ class DriverSettlementApp(tk.Tk):
 
         self.status_var = tk.StringVar(value=f"Database: {DB_PATH}")
         ttk.Label(self, textvariable=self.status_var, relief="sunken", anchor="w").pack(fill="x", side="bottom")
+
+    def run_demo(self):
+        metrics = database.dashboard_metrics(DB_PATH)
+        if metrics["loads"] and not messagebox.askyesno(
+            "Reset local demo database?",
+            "The built-in demo replaces the local settlement database used by this application. Continue?",
+        ):
+            return
+        try:
+            if DB_PATH.exists():
+                DB_PATH.unlink()
+            demo_root = app_data_dir() / "demo_packet"
+            if demo_root.exists():
+                import shutil
+                shutil.rmtree(demo_root, ignore_errors=True)
+            dataset = generate_demo_dataset(demo_root)
+            imported = database.import_load_board(dataset["load_board"], DB_PATH)
+            self.packet_files = [str(path) for path in dataset["documents"]]
+            self.files_list.delete(0, tk.END)
+            for path in self.packet_files:
+                self.files_list.insert(tk.END, path)
+            result = process_packet(self.packet_files, DB_PATH)
+            self.refresh()
+            auto = sum(1 for row in result["loads"] if row["status"] == "AUTO_CLEARED")
+            review = sum(1 for row in result["loads"] if row["status"] == "REVIEW")
+            messagebox.showinfo(
+                "Demo complete",
+                f"Imported {imported} loads and OCR-processed {len(result['documents'])} scanned documents.\n\n"
+                f"Auto-cleared: {auto}\nNeeds review: {review}\n\n"
+                "Open the Exceptions and Audit Log tabs to see why loads were held and exactly what the system changed.",
+            )
+            self.status_var.set("Built-in end-to-end demo completed")
+        except Exception as exc:
+            messagebox.showerror("Demo failed", str(exc))
 
     def import_load_board(self):
         path = filedialog.askopenfilename(title="Select load board CSV", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
@@ -186,6 +225,9 @@ class DriverSettlementApp(tk.Tk):
 
 
 def main():
+    if "--verify" in sys.argv or "--self-test" in sys.argv:
+        from driver_settlement.verify import main as verify_main
+        raise SystemExit(verify_main())
     app = DriverSettlementApp()
     app.mainloop()
 
