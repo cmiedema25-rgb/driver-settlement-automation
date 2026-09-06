@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import os
+import sys
 from pathlib import Path
 
 import fitz
@@ -12,12 +14,37 @@ class OCRUnavailable(RuntimeError):
     pass
 
 
+def _configure_tesseract() -> None:
+    """Use bundled Tesseract inside a PyInstaller executable when present."""
+    candidates: list[Path] = []
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root:
+        candidates.append(Path(bundle_root) / "tesseract" / "tesseract.exe")
+    if os.name == "nt":
+        candidates.extend(
+            [
+                Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Tesseract-OCR" / "tesseract.exe",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+            ]
+        )
+    for candidate in candidates:
+        if candidate.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(candidate)
+            tessdata = candidate.parent / "tessdata"
+            if tessdata.exists():
+                os.environ.setdefault("TESSDATA_PREFIX", str(tessdata))
+            return
+
+
+_configure_tesseract()
+
+
 def _ocr_image(image: Image.Image) -> str:
     try:
         return pytesseract.image_to_string(image.convert("RGB"), config="--psm 6").strip()
     except pytesseract.TesseractNotFoundError as exc:
         raise OCRUnavailable(
-            "Tesseract OCR is not installed or not on PATH. Install tesseract-ocr and retry."
+            "Tesseract OCR is unavailable. Use the packaged Windows executable or install Tesseract OCR."
         ) from exc
 
 
