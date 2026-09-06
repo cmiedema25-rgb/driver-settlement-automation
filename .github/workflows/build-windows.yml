@@ -1,0 +1,31 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build executable
+        shell: powershell
+        run: ./scripts/build_windows.ps1
+      - name: Create checksum
+        shell: powershell
+        run: |
+          $hash = (Get-FileHash dist\DriverSettlementAutomation.exe -Algorithm SHA256).Hash
+          "SHA256  DriverSettlementAutomation.exe`n$hash" | Out-File -Encoding ascii dist\SHA256.txt
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: DriverSettlementAutomation-Windows
+          path: |
+            dist/DriverSettlementAutomation.exe
+            dist/SHA256.txt
+          if-no-files-found: error
