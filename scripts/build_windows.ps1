@@ -17,7 +17,7 @@ if (-not (Test-Path (Join-Path $tesseract "tesseract.exe"))) {
 Write-Host "Running unit tests..."
 python -m pytest -q
 
-Write-Host "Running end-to-end OCR verification..."
+Write-Host "Running internal OCR and settlement self-test..."
 python -m driver_settlement.verify
 
 Write-Host "Building standalone Windows executable..."
