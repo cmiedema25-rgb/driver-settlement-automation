@@ -37,6 +37,13 @@ if (-not (Test-Path $exe)) {
     throw "Build completed without expected executable: $exe"
 }
 
+Write-Host "Running packaged executable self-test..."
+$process = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
+if ($process.ExitCode -ne 0) {
+    throw "Packaged executable self-test failed with exit code $($process.ExitCode)"
+}
+Write-Host "Packaged executable self-test passed."
+
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
 $size = (Get-Item $exe).Length
 Write-Host "Built: $exe"
