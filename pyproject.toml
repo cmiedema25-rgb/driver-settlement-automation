@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "driver-settlement-automation"
+version = "0.1.0"
+description = "OCR-driven driver paperwork and settlement reconciliation automation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "gradio>=4.44,<6",
+  "Pillow>=10.0",
+  "pytesseract>=0.3.10",
+  "PyMuPDF>=1.24",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+driver-settlement-verify = "driver_settlement.verify:main"
